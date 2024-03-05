@@ -1,0 +1,734 @@
+#:kivy 1.0.9
+
+
+
+<NodeNsUpdateProcedure>: 
+    name: 'Accordions'
+    box_1: box_ud
+    box_2: box_pc
+    box_3: box_ud_par
+    box_4: box_lines
+    box_5: box_num_pnts
+    box_room_config: box_room_config
+    box_monitoring_zone: box_monitoring_zone
+    btn_1: btn_connect
+    ai_sensor_config: ai_sensor_config
+    ai_room_config: ai_room_config
+    text_room_config: text_room_config
+    fullscreen: True
+    cfg_entry_x: config_x
+    cfg_entry_y: config_y
+    draw_rectangle_button : draw_rectangle_button
+
+    led_1: led_connect
+
+
+    Accordion:
+        orientation: 'horizontal'
+        width: self.parent.width
+        height: self.parent.height
+        
+
+        AccordionItem:
+            id: ai_sensor_config
+            title: 'Sensor configuration'
+            collapse: False
+
+            GridLayout:
+                #padding: [10,10]
+                rows: 5
+                
+                BoxLayout:
+                    height: 100
+                    orientation: 'horizontal'
+                    padding: [10,10]
+                    size_hint_y: 0.2
+
+                    Image:
+                        source: "NodeNs-Logo-Inverted_small.png"
+                        allow_stretch: False
+
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: [10,10]
+                
+                BoxLayout:
+                    orientation: 'horizontal'
+                    padding: [10,10]
+                    size_hint_y: 0.3
+                    height: 200
+
+                    GridLayout:
+                        row_force_default: True
+                        row_default_height: 60
+                        row_default_width: 2000
+                        rows: 4
+                        cols: 2
+                        padding: [10,10]
+
+                        CustLabel: 
+                            text: 'IP address'
+                        CustTextInput:
+                            id: ip_add
+                            hint_text: '10.3.141.1'
+
+                        CustLabel: 
+                            text: 'Root ID'
+                        Spinner:
+                            id: root_spinner
+                            #size_hint: None, None
+                            #size: 2000, 30
+                            #pos_hint: {'center': (.5, .5)}
+                            text: 'Root ID'
+                            #hint_text: '7cdfa1015d6c'
+                            values: 'None'
+                            on_text:
+                                print("The root_spinner {} has text {}".format(self, self.text))
+                                root.root_spinner_callback()
+
+                        CustLabel: 
+                            text: 'Sensor ID'
+                        Spinner:
+                            id: sensor_spinner
+                            #size_hint: None, None
+                            #size: 2000, 30
+                            #pos_hint: {'center': (.5, .5)}
+                            text: 'Sensor ID'
+                            #hint_text: '7cdfa1015d6c'
+                            values: 'None'
+                            on_text:
+                                root.sensor_spinner_callback()
+
+                    BoxLayout:
+                        canvas:
+                            Color:
+                                rgba: 0.5, 0.5, 0.5, 0.5
+                            Rectangle:
+                                size: self.parent.size
+                                pos: self.pos
+                        orientation: 'vertical'
+                        padding: [10,10,10,10]
+                        #spacing: 10
+
+                        GridLayout:
+                            row_force_default: False
+                            #row_default_height: 30
+                            rows: 5
+                            #padding: [0,0]
+                            #size_hint_y: None
+                            height: self.minimum_height
+
+                            GridLayout:
+                                #row_force_default: True
+                                rows: 1
+                                cols: 1
+                                #padding: [30,30]
+                                size_hint_y: None
+                                height: 100
+
+                                CustLabel:
+                                    text: 'Config: Room size'
+                                    font_size: dp(30)
+
+                            GridLayout:
+                                #row_force_default: True
+                                rows: 1
+                                cols: 4
+                                #padding: [30,30]
+                                size_hint_y: None
+                                height: 60
+                        
+                                CustLabel:
+                                    text: 'X min'
+
+                                CustTextInput:
+                                    id: room_x_min
+                                    hint_text: '-2'
+
+                                CustLabel:
+                                    text: 'X max'
+
+                                CustTextInput:
+                                    id: room_x_max
+                                    hint_text: '2'
+
+                            GridLayout:
+                                #row_force_default: True
+                                rows: 1
+                                cols: 4
+                                #padding: [10,10]
+                                size_hint_y: None
+                                height: 60
+
+                                CustLabel:
+                                    text: 'Y min'
+
+                                CustTextInput:
+                                    id: room_y_min
+                                    hint_text: '0.5'
+
+                                CustLabel:
+                                    text: 'Y max'
+
+                                CustTextInput:
+                                    id: room_y_max
+                                    hint_text: '4'
+
+                            
+                            GridLayout:
+                                cols: 2
+                                #row_force_default: False
+                                size_hint_y: None
+                                height: 100
+                                padding: 10
+                                
+                                Button: 
+                                    pos: self.parent.pos
+                                    text: 'READ CONFIG'
+                                    id: btn_read_config
+                                    #width: 0.1
+                                    size: 400, 80
+                                    size_hint: None, None
+                                    on_release: root.btn_read_current_config()
+
+                                Button: 
+                                    pos: self.parent.pos
+                                    text: 'SEND CONFIG'
+                                    id: btn_send_config
+                                    #width: 0.1
+                                    size: 400, 80
+                                    size_hint: None, None
+                                    on_release: root.btn_send_config_update()
+
+                            GridLayout:
+                                cols: 2
+                                #row_force_default: False
+                                size_hint_y: None
+                                height: 100
+                                padding: [10,0]
+
+                                Button: 
+                                    pos: self.parent.pos
+                                    text: 'AUTO CONFIG'
+                                    id: btn_config_proc
+                                    #width: 0.1
+                                    size: 400, 80
+                                    size_hint: None, None
+                                    on_release: root.btn_goto_config()
+
+                           
+
+                BoxLayout:
+                    canvas:
+                        Color:
+                            rgba: 0.0, 0., 0., 0.5
+                        Rectangle:
+                            size: self.size
+                            pos: self.pos
+                    orientation: 'horizontal'
+                    padding: [50,50]
+                    spacing: 0
+                    size_hint_y: 0.1
+                   
+                    Button: 
+                        text: 'CONNECT'
+                        id: btn_connect
+                        #pos_hint: {'top': 0}
+                        #pos: self.pos
+                        size: 400, 80
+                        size_hint: None, None
+                        on_release: root.mqtt_connect()
+                        y: self.parent.center_y+20
+                        
+                    LED_Indicator:
+                        id: led_connect
+                        #pos_hint: {'top': 0}
+                        #pos: self.pos
+                        #x: 1000
+                        y: self.parent.center_y
+
+                    BoxLayout:
+
+                    BoxLayout:
+
+
+                BoxLayout:
+                    canvas:
+                        Color:
+                            rgba: 0., 0., 0.0, 0.5
+                        Rectangle:
+                            size: self.size
+                            pos: self.pos
+                    orientation: 'horizontal'
+                    padding: [50,50]
+                    spacing: 50
+                    size_hint_y: 0.1
+
+                    BoxLayout:
+                        size_hint_y: None
+                        height: 80
+
+
+                    BoxLayout:
+                        size_hint_y: None
+                        height: 80
+                        Label:
+                            text: 'Save data to Cloud'
+                            text_size: self.size
+                        Switch:
+                            id: cloud_switch
+
+                            # False means OFF and True means ON
+                            active: False
+
+                            # Arranging a callback to the switch
+                            on_active: root.cloud_switch_callback(self, self.active)
+                        Label:
+                            text: 'SAVE to CLOUD' if cloud_switch.active else ''
+
+                BoxLayout:
+                    canvas:
+                        Color:
+                            rgba: 0., 0.0, 0., 0.5
+                        Rectangle:
+                            size: self.size
+                            pos: self.pos
+                    orientation: 'horizontal'
+                    padding: [50,50]
+                    spacing: 50
+                    size_hint_y: 0.1
+
+                    BoxLayout:
+                        size_hint_y: None
+                        height: 40
+
+                        Button:
+                            id: save_button
+                            size: 150, 40
+                            text: 'Save location...'
+                            on_release: root.show_save()
+                            disabled: False
+
+                    BoxLayout:
+                        size_hint_y: None
+                        height: 40
+                        Label:
+                            text: 'Save data'
+                        Switch:
+                            id: save_switch
+
+                            # False means OFF and True means ON
+                            active: False
+
+                            # Arranging a callback to the switch
+                            on_active: root.save_switch_callback(self, self.active)
+                        Label:
+                            text: 'SAVE' if save_switch.active else ''
+
+        AccordionItem:
+            id: monitor_zones_config
+            title: 'Monitoring zones configuration'
+            collapse: True
+            size_hint: 0.3,1
+
+            DrawingScreen:
+                id: drawing_screen
+
+                canvas.before:
+                    Color:
+                        rgba: 0.1, 0.1, 0.9, 0.4
+                    Rectangle:
+                        id: area1
+                        pos: (0.25*app._window_size[0], 0.1*app._window_size[1])
+                        size: (0.5*app._window_size[0], 0.8*app._window_size[1])
+                        #pos: (50,50)
+                        #size:(100,100)
+
+                BoxLayout:
+                    id: box_monitoring_zone  
+                    pos: (0.25*app._window_size[0], 0.1*app._window_size[1])
+                    size_hint: (0.5*app._window_size[0]/(app._window_size[0]-400), 0.8)
+                    #size: (10000,10000)
+                    padding: 0
+
+                GridLayout:
+                    cols: 1
+                    size_hint: (0.25,0.6)
+                    padding: 0
+                    
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: 20
+
+                        Button:
+                            id: draw_rectangle_button
+                            text: "Rectangle"
+
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: 20
+
+                        Button:
+                            id: draw_line_button
+                            text: "Line"
+
+                        Button:
+                            id: draw_arc_button
+                            text: "Arc"
+
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: 20
+
+                        Button:
+                            id: draw_free_button
+                            text: "Free"
+
+                        Button:
+                            id: undo_button
+                            text: "Undo"
+
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: 20
+
+                        Button:
+                            id: zone_type_button
+                            text: "SAFE zone"
+                            background_color: 0,1,0,1
+
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: 20
+
+                        Button:
+                            id: close_shape_button
+                            text: "CLOSE SHAPE"
+                
+
+        AccordionItem:
+            id: sensor_data_plots
+            title: 'Sensor data'
+            collapse: True
+
+            #canvas.before:
+            #    Color:
+            #        rgba: 1, 1, 1, 1
+            #    Rectangle:
+            #        pos: self.pos
+            #        size: self.size
+                      
+            GridLayout:
+                #padding: [-10,-10]
+                rows: 3
+                cols: 2
+                
+                BoxLayout:
+                    id: box_ud
+
+                BoxLayout:
+                    id: box_pc
+
+                BoxLayout:
+                    id: box_ud_par
+
+                BoxLayout:
+                    id: box_lines
+
+                BoxLayout:
+                    id: box_num_pnts
+
+                BoxLayout:
+                    orientation: 'vertical'
+                    #size_hint: None, None
+
+                    canvas.before:
+                        Color:
+                            rgba: 1, 1, 1, 1
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+
+                    BoxLayout:
+
+                        CustTextInput:
+                            id: text_sensor_msg
+                            size_hint_x: 1
+                            size_hint_y: 0.7
+                            width: self.parent.width
+                            hint_text: 'Sensor messages will show here'
+                            font_size: dp(15)
+
+                        #Image:
+                        #    size: 236,85
+                        #    center: self.parent.center
+                        #    size_hint: None, None
+                        #    source: 'NodeNs-Logo.png'
+                        #    allow_stretch: True
+
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: [10,0]
+                        spacing: 40
+                        size_hint: None, None
+                  
+                        Button: 
+                            text: 'START DATA'
+                            id: btn_full_data_start
+                            size: 400, 80
+                            size_hint: None, None
+                            on_release: root.mqtt_start()
+
+                        Button: 
+                            text: 'STOP DATA'
+                            id: btn_full_data_stop
+                            size: 400, 80
+                            size_hint: None, None
+                            on_release: root.btn_stop_full_data()
+        
+        
+        AccordionItem:
+            id: ai_room_config
+            title: 'Room configuration'
+            collapse: True
+
+            GridLayout:
+                rows: 2
+                cols: 2
+                #padding: 10
+
+                BoxLayout:
+                    canvas:
+                        Color:
+                            rgba: 0, 0, 0, 1
+                        Rectangle:
+                            size: self.size
+                            pos: self.pos
+                    size_hint_x: 0.3
+                    size_hint_y: 0.2
+
+                    Image:
+                        source: 'NodeNs-Logo-Inverted_small.png'
+                        allow_stretch: False
+
+                BoxLayout:
+                    canvas:
+                        Color:
+                            rgba: 0, 1, 0, 0.5
+                        Rectangle:
+                            size: self.size
+                            pos: self.pos
+                    orientation: 'vertical'
+                    size_hint_x: 0.7
+                    size_hint_y: 0.2
+
+                    CustTextInput:
+                        id: text_room_config
+                        size_hint_x: 1
+                        width: self.parent.width
+                        hint_text: 'Room configuration process \nMessages will show here'
+                        font_size: dp(15)
+
+                BoxLayout:
+                    canvas:
+                        Color:
+                            rgba: 0.5, 0.5, 0.5, 0.5
+                        Rectangle:
+                            size: self.size
+                            pos: self.pos
+                    orientation: 'vertical'
+                    size_hint_x: 0.3
+                    size_hint_y: 0.8
+
+                    GridLayout:   
+                        rows: 1
+                        #orientation: 'horizontal'
+                        size_hint: 1, 0.2
+                        CustLabel:
+                            text: 'Room configuration'
+                            font_size: dp(30)
+
+                    GridLayout: 
+                        cols: 2
+                        size_hint: 1, 0.2
+                        padding: 10
+                        Button: 
+                            padding: 20
+                            text: 'START CONFIG'
+                            #pos_hint: 0.5,0.5
+                            id: btn_start_config
+                            size: 400, 80
+                            size_hint: None, None
+                            on_release: root.btn_start_config_proc()
+
+
+                        Button:
+                            padding: 20
+                            text: 'CONFIG DONE'
+                            #pos_hint: 0.5,0.5
+                            id: btn_end_config
+                            size: 400, 80
+                            size_hint: None, None
+                            on_release: root.btn_end_config_proc()
+                    
+                    ConfigEntries:
+                        id: config_x
+                        size_hint: 1, 0.2
+                        padding: 20
+                    ConfigEntries:
+                        id: config_y
+                        size_hint: 1, 0.2
+                        padding: 20
+
+                    
+                    GridLayout:
+                        rows: 1
+                        CustTextInput:
+                            id: room_config_settings
+                            size_hint_x: 1
+                            width: self.parent.width
+                            hint_text: 'Start config button\nXminXmax\nYminYmax\nStatus button + Status message'
+                            padding: 10
+
+                BoxLayout:
+                    canvas:
+                        Color:
+                            rgba: 0, 0, 0, 0.5
+                        Rectangle:
+                            size: self.size
+                            pos: self.pos
+                    orientation: 'vertical'
+                    size_hint_x: 0.7
+                    size_hint_y: 0.8
+
+                    BoxLayout:
+                        id: box_room_config
+
+
+                    
+
+
+
+<NodeNsLogo@Image>:
+    Image:
+        source: 'NodeNs-Logo.png'
+
+<LED_Indicator>:
+    canvas:
+        Color:
+            rgba: self.color
+        Ellipse:
+            pos: [self.center_x - 0*25/2, self.center_y + 0*25/2]
+            size: 25, 25        
+
+<CustLabel@Label>:
+    font_size: dp(20)
+    pos_hint: [None, None]
+    color: 1, 0.757, 0.145, 1
+    size_hint: [.8,.8]
+
+<CustTextInput@TextInput>:
+    font_size: dp(20)
+    write_tab: False    
+    size_hint: [.5,.5]
+
+<LoadDialog>:
+    BoxLayout:
+        #size: self.parent.size
+        #pos: self.parent.pos
+        orientation: "vertical"
+        FileChooserListView:
+            id: filechooser
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            Button:
+                text: "Cancel"
+                on_release: root.cancel()
+
+            Button:
+                text: "Load"
+                on_release: root.load(filechooser.path, filechooser.selection)
+
+<SaveDialog>:
+    text_input: "text.txt"
+    BoxLayout:
+        size: self.parent.size
+        pos: self.parent.pos
+        orientation: "vertical"
+        FileChooserListView:
+            id: filechooser
+            path: "C:/Users/kraja/OneDrive/Documents/Kivy/NodeNs_project/"
+            on_selection: text_input.text = self.selection and self.selection[0] or ''
+
+        TextInput:
+            id: text_input
+            size_hint_y: None
+            height: 30
+            multiline: False
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            Button:
+                text: "Cancel"
+                on_release: root.cancel()
+
+            Button:
+                text: "Save"
+                on_release: root.save(filechooser.path, text_input.text)
+
+<ConfigEntries>:
+    BoxLayout:
+        orientation: 'horizontal'
+        size: root.size
+        Label:
+            id: entry_min
+            text: 'X min'
+        TextInput:
+            id: min_text
+            hint_text: '-1'
+        Label:
+            id: entry_max
+            text: 'X max'
+        TextInput:
+            id: max_text
+            hint_text: '1'
+
+<LEDStatus>:
+    BoxLayout:
+        orientation: 'horizontal'
+        size: root.size
+        BoxLayout:
+            LED_Indicator:
+                id: led_connect2
+                y: self.parent.center_y
+        BoxLayout:
+            Label:
+                text: 'STATUS'
+
+<Label>:
+    font_size: dp(20)
+
+<DrawingScreen>:
+    #canvas.before:
+    #    Color:
+    #        rgba: 0.1, 0.1, 0.9, 0.4
+    #    Rectangle:
+    #        pos: (0.35*app._window_size[0], 0.1*app._window_size[1])
+    #        size: (0.5*app._window_size[0], 0.8*app._window_size[1])
+    #        #pos: (50,50)
+    #        #size:(100,100)
+
+     
+
+<Tooltip>:
+    size_hint: None, None
+    size: self.texture_size[0]+5, self.texture_size[1]+5
+    canvas.before:
+        Color:
+            rgb: 1, 1, 1
+        Rectangle:
+            size: self.size
+            pos: self.pos
