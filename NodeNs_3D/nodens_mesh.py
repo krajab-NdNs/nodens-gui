@@ -56,7 +56,6 @@ class mesh:
         for i in range(len(payload)):
             json_message = json.dumps(payload[i])
             logging.debug("CONFIG SEND: {}".format(json_message))
-            print("CONFIG SEND: {}".format(json_message))
             self.client.publish(topic, json_message)
             time.sleep(0.01)
         self.client.subscribe('#')

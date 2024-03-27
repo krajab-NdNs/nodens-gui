@@ -353,8 +353,65 @@
 
                 GridLayout:
                     cols: 1
-                    size_hint: (0.25,0.6)
+                    size_hint: (0.25,0.8)
                     padding: 0
+                    
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: 20
+                        size_hint_y: None
+
+                        Label:
+                            text: 'Show point cloud'
+                            text_size: self.size
+                    
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: 20
+                        size_hint_y: None
+
+                        Switch:
+                            id: monitor_pc_switch
+
+                            # False means OFF and True means ON
+                            active: False
+                            background_color: 0,1,0,1
+
+                            # Arranging a callback to the switch
+                            on_active: root.monitor_pc_switch_callback(self, self.active)
+                        Label:
+                            text: 'Show point cloud' if monitor_pc_switch.active else ''
+
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: 20
+                        size_hint_y: None
+
+                        Label:
+                            text: 'Play alarm sounds'
+                            text_size: self.size
+                    
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: 20
+                        size_hint_y: None
+
+                        Switch:
+                            id: alarm_sounds_switch
+
+                            # False means OFF and True means ON
+                            active: False
+                            background_color: 0,1,0,1
+
+                            # Arranging a callback to the switch
+                            on_active: root.alarm_sounds_switch_callback(self, self.active)
+                        Label:
+                            text: 'Play alarm sounds' if alarm_sounds_switch.active else ''
+                    
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        padding: 20
+                        size_hint_y: None
                     
                     BoxLayout:
                         orientation: 'horizontal'

@@ -496,6 +496,12 @@ def save_switch_callback(instance, value):
 def cloud_switch_callback(instance, value):
     print('the cloud save switch', instance, 'is', value)
 
+def monitor_pc_switch_callback(instance, value):
+    print('the monitoring zone point cloud switch', instance, 'is', value)
+
+def alarm_sounds_switch_callback(instance, value):
+    print('the alarm sounds switch', instance, 'is', value)
+
 
 class Root(FloatLayout):
     loadfile = ObjectProperty(None)
@@ -774,6 +780,7 @@ class NodeNsUpdateProcedure(Widget):
     line_zone_type = []
     zone_type = "safe"
     zone_color = [0,1,0,1]
+    zone_msg_sent_status = 'none'
     clock = []
 
     boundary_xy = []
@@ -838,6 +845,13 @@ class NodeNsUpdateProcedure(Widget):
         else:
             self.ids.cloud_switch.active = False
             ndns_fns.cp.ENABLE_GCP = 0
+
+        ## ~~~~~~~ Monitoring zone ~~~~~~~~~ ##
+        monitor_pc_switch = Switch()
+        monitor_pc_switch.bind(active=monitor_pc_switch_callback)
+
+        alarm_sounds_switch = Switch()
+        alarm_sounds_switch.bind(active=alarm_sounds_switch_callback)
         
         ##~~~~~~~~ Initialise spinner with list of root and sensor IDs ~~~~~~~~##
         self.ids.root_spinner.text = "Not connected..."
@@ -929,7 +943,7 @@ class NodeNsUpdateProcedure(Widget):
         ax_mz.set_ylim(0.5, 4)
         ax_mz.set_xlim(-2, 2)
         ax_mz.set_facecolor((1.0, 0, 0,1))
-        self.fig_mon_zone.set_facecolor((0, 1, 0, 1))
+        # self.fig_mon_zone.set_facecolor((0, 1, 0, 1))
         ax_mz.get_xaxis().set_visible(False)
         ax_mz.get_yaxis().set_visible(False)
         self.fig_mon_zone.tight_layout()
@@ -1055,8 +1069,8 @@ class NodeNsUpdateProcedure(Widget):
 
                     track_idx = oh.id[sens_idx].index(sd.track.tid[i])
                     ax2.plot(oh.xh[sens_idx][track_idx], oh.yh[sens_idx][track_idx])
-            except:
-                print("Warning. Stuck at scatter. sd.track.num_tracks:{}. sens_idx: {}. sd.track.tid: {}. oh.id: {}.".format(sd.track.num_tracks,sens_idx,sd.track.tid,oh.id))
+            except Exception as e:
+                self.handleError(e)
             
             if -1 in self.line_status:
                 ax2.set_facecolor("red")
@@ -1214,9 +1228,9 @@ class NodeNsUpdateProcedure(Widget):
         ## ~~~~~~~ Monitoring zone point cloud ~~~~~~~ ##
 
         self.box_monitoring_zone.clear_widgets()
-        self.box_2.clear_widgets()
-        plt.figure(self.fig2.number)
-        plt.clf()
+        #self.box_2.clear_widgets()
+        #plt.figure(self.fig2.number)
+        #plt.clf()
         #ax2 = self.fig2.add_subplot(projection='3d')
         ax2 = self.fig2.add_subplot()
 
@@ -1224,24 +1238,52 @@ class NodeNsUpdateProcedure(Widget):
         plt.clf()
         #ax2 = self.fig2.add_subplot(projection='3d')
         ax_mz = self.fig_mon_zone.add_subplot()
-        ax_mz.set_facecolor((1.0, 1, 1,0))
+        ax_mz.set_facecolor((1, 1, 1,0))
         self.fig_mon_zone.set_facecolor((1, 1, 1, 0))
         if -1 in self.line_status:
-            ax_mz.set_facecolor("red")
+            ax_mz.set_facecolor((1, 0, 0, 0.5))
+            if self.zone_msg_sent_status != 'exclusion':
+                json_msg = {'alert':'exclusion'}
+                json_payload = [json_msg]
+                ndns_mesh.MESH.multiline_payload(ndns_fns.cp.SENSOR_IP, ndns_fns.cp.SENSOR_PORT, 60, "monitor_msg", json_payload)
+                self.zone_msg_sent_status = 'exclusion'
         elif 1 in self.line_status:
-            ax_mz.set_facecolor("green")
+            ax_mz.set_facecolor((0, 1, 0, 0.5))
+            if self.zone_msg_sent_status != 'safe':
+                json_msg = {'alert':'safe'}
+                json_payload = [json_msg]
+                ndns_mesh.MESH.multiline_payload(ndns_fns.cp.SENSOR_IP, ndns_fns.cp.SENSOR_PORT, 60, "monitor_msg", json_payload)
+                self.zone_msg_sent_status = 'safe'
         else:
             ax_mz.set_facecolor((1.0, 1, 1,0))
+            if self.zone_msg_sent_status != 'none':
+                json_msg = {'alert':'none'}
+                json_payload = [json_msg]
+                ndns_mesh.MESH.multiline_payload(ndns_fns.cp.SENSOR_IP, ndns_fns.cp.SENSOR_PORT, 60, "monitor_msg", json_payload)
+                self.zone_msg_sent_status = 'none'
         ax_mz.set_xlim((-2, 2))
         ax_mz.set_ylim((0.5,4))
         ax_mz.get_xaxis().set_visible(False)
         ax_mz.get_yaxis().set_visible(False)
         
+        # point cloud history
+        for i in range(1,len(sd.pc_history.X)):
+            ax_mz.scatter(sd.pc_history.X[i], sd.pc_history.Y[i], s=40, c='w', alpha=max(0,(11-i)*0.1))
+
         if sd.track.num_tracks > 0:
-            ax_mz.scatter(sd.pc.X, sd.pc.Y, s=10, c='#FF0000')
-            ax_mz.scatter(sd.track.X, sd.track.Y, s=100, marker='x')
+            ax_mz.scatter(sd.pc.X, sd.pc.Y, s=40, c=(1, 1, 1, 1))
+            ax_mz.scatter(sd.track.X, sd.track.Y, s=1000, marker='P', c=(1, 0.5, 0, 1))
         else:
-            ax_mz.scatter(sd.pc.X, sd.pc.Y, s=10, c='#000000')  
+            ax_mz.scatter(sd.pc.X, sd.pc.Y, s=40, c=(1, 1, 1, 1))  
+
+        try:
+            for i in range(sd.track.num_tracks):
+                sens_idx = oh.sens_idx.index(self.ids.sensor_spinner.text)
+
+                track_idx = oh.id[sens_idx].index(sd.track.tid[i])
+                ax_mz.plot(oh.xh[sens_idx][track_idx], oh.yh[sens_idx][track_idx], linewidth=3, c=(1, 0.5, 0, 1))
+        except Exception as e:
+            self.handleError(e)
 
         self.box_monitoring_zone.add_widget(FigureCanvasKivyAgg(self.fig_mon_zone))
 
@@ -1423,6 +1465,28 @@ class NodeNsUpdateProcedure(Widget):
             #f.write(output)
             f.truncate()
 
+    def monitor_pc_switch_callback(self, switchObject, switchValue):
+        if switchValue is False:
+            if self.clock != []:
+                self.clock.cancel()
+                self.clock = []
+        else:
+            if self.clock == []:
+                self.clock = Clock.schedule_interval(self.update, 0.05)
+        
+
+    def alarm_sounds_switch_callback(self, switchObject, switchValue):
+        if switchValue is False:
+            json_msg = {'sound':'off'}
+            json_payload = [json_msg]
+            print('sound off')
+            ndns_mesh.MESH.multiline_payload(ndns_fns.cp.SENSOR_IP, ndns_fns.cp.SENSOR_PORT, 60, "monitor_msg", json_payload)
+        else:
+            json_msg = {'sound':'on'}
+            json_payload = [json_msg]
+            print('sound on')
+            ndns_mesh.MESH.multiline_payload(ndns_fns.cp.SENSOR_IP, ndns_fns.cp.SENSOR_PORT, 60, "monitor_msg", json_payload)
+
     # Select root and sensor
     def root_spinner_callback(self):
         global sm
@@ -1578,6 +1642,7 @@ class NodeNsUpdateProcedure(Widget):
             self.canvas.remove(item)
             self.line_xy.pop(-1)
             self.line_status.pop(-1)
+            self.line_zone_type.pop(-1)
             self._drawing_init = 1
             print(f"Remove last zone")
         else:
@@ -1636,8 +1701,8 @@ class NodeNsUpdateProcedure(Widget):
                 self.clock.cancel()
                 self.clock = []
             except Exception as e: print(e)
-        if self.clock == []:
-            self.clock = Clock.schedule_interval(self.update, 0.25)
+        # if self.clock == []:
+        #     self.clock = Clock.schedule_interval(self.update, 0.25)
 
     def open_sensor_data_plots(self, *args):
         with self.canvas:
@@ -1647,7 +1712,7 @@ class NodeNsUpdateProcedure(Widget):
                 except:
                     pass
         if self.clock == []:
-            self.clock = Clock.schedule_interval(self.update, 0.25)
+            self.clock = Clock.schedule_interval(self.update, 0.05)
         
 
     def on_window_resize(self, window, width, height):
@@ -1674,10 +1739,13 @@ class NodeNsUpdateProcedure(Widget):
                 Y[1] = float(self.ids.room_y_max.text)
             pos = args[1]
     
-            self.tooltip.pos = [pos[0] - self._window_size[0]/2 - self.ids.drawing_screen.pos[0],pos[1] - self._window_size[1]/2]
+            self.tooltip.pos = [pos[0] - self._window_size[0]/2 - 0*self.ids.drawing_screen.pos[0], pos[1] - self._window_size[1]/2]
             temp_x = X[0] + (X[1] - X[0])*(pos[0] - 0.25*self._window_size[0] - self.ids.drawing_screen.pos[0])/(0.5*self._window_size[0])
             temp_y = Y[0] + (Y[1] - Y[0])*(pos[1] - 0.1*self._window_size[1])/(0.8*self._window_size[1])
-            self.tooltip.text = str(f"X:{temp_x:.1f}, Y:{temp_y:.1f}.\n Coords: ({pos[0]},{pos[1]})")
+            if (temp_x >= X[0]) and (temp_x <= X[1]) and (temp_y >= Y[0]) and (temp_y <= Y[1]):
+                self.tooltip.text = str(f"X:{temp_x:.1f}, Y:{temp_y:.1f}")
+            else:
+                self.tooltip.text = ""
 
     def close_tooltip(self, *args):
         Window.remove_widget(self.tooltip)
@@ -1844,10 +1912,11 @@ class NodeNsUpdateProcedure(Widget):
                                 num_intercepts += 1
                     
                     if (num_intercepts/2 == round(num_intercepts/2)):
-                        print(f"Track: {track.X[j],track.Y[j]} is outside a boundary.")
+                        # print(f"Track: {track.X[j],track.Y[j]} is outside a boundary.")
+                        pass
                         
                     else:
-                        print(f"OCCUPANT! Track: {track.X[j],track.Y[j]} is inside a boundary.")
+                        # print(f"OCCUPANT! Track: {track.X[j],track.Y[j]} is inside a boundary.")
                         num_occ[idx] += 1
 
         for idx in range(len(self.line)):
