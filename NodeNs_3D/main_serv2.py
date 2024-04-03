@@ -1226,6 +1226,11 @@ class NodeNsUpdateProcedure(Widget):
             plt.title('Number of points')
             self.box_5.add_widget(FigureCanvasKivyAgg(self.fig5))
    
+        
+
+    def update_mon_zone(self, dt):
+        global sts, UD12, sd
+
         ## ~~~~~~~ Monitoring zone point cloud ~~~~~~~ ##
 
         self.box_monitoring_zone.clear_widgets()
@@ -1474,7 +1479,7 @@ class NodeNsUpdateProcedure(Widget):
                 self.clock = []
         else:
             if self.clock == []:
-                self.clock = Clock.schedule_interval(self.update, 0.05)
+                self.clock = Clock.schedule_interval(self.update_mon_zone, 0.005)
         
 
     def alarm_sounds_switch_callback(self, switchObject, switchValue):
@@ -1714,7 +1719,7 @@ class NodeNsUpdateProcedure(Widget):
                 except:
                     pass
         if self.clock == []:
-            self.clock = Clock.schedule_interval(self.update, 0.05)
+            self.clock = Clock.schedule_interval(self.update, 0.01)
         
 
     def on_window_resize(self, window, width, height):
