@@ -1070,7 +1070,8 @@ class NodeNsUpdateProcedure(Widget):
                     track_idx = oh.id[sens_idx].index(sd.track.tid[i])
                     ax2.plot(oh.xh[sens_idx][track_idx], oh.yh[sens_idx][track_idx])
             except Exception as e:
-                self.handleError(e)
+                # self.handleError(e)
+                print(e)
             
             if -1 in self.line_status:
                 ax2.set_facecolor("red")
@@ -1283,7 +1284,8 @@ class NodeNsUpdateProcedure(Widget):
                 track_idx = oh.id[sens_idx].index(sd.track.tid[i])
                 ax_mz.plot(oh.xh[sens_idx][track_idx], oh.yh[sens_idx][track_idx], linewidth=3, c=(1, 0.5, 0, 1))
         except Exception as e:
-            self.handleError(e)
+            # self.handleError(e)
+            print(e)
 
         self.box_monitoring_zone.add_widget(FigureCanvasKivyAgg(self.fig_mon_zone))
 

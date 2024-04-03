@@ -124,11 +124,11 @@ class radar_config_params:
                 "staticBoundaryBox -2 2 2 5.5 0 3",
                 "boundaryBox -2.5 2.5 0.5 6 0 3",
                 "sensorPosition 1 0 0",
-                "gatingParam 3 2 2 2 4",    # 25
+                "gatingParam 3 1.5 1.5 2 4",    # 25
                 "stateParam 3 3 20 65500 5 65500",
                 "allocationParam 40 100 0.025 50 0.8 20",
                 "maxAcceleration 0.1 0.1 0.1",
-                "trackingCfg 1 2 800 20 46 96 55",
+                "trackingCfg 1 2 800 15 46 96 55",
                 "presenceBoundaryBox -4 4 0.5 6 0 3",   # 30
                 "sensorStart"
                 ]
@@ -163,6 +163,7 @@ class radar_config_params:
         # Units: degrees.
         # Yaw: rotation around Z-axis (side-to-side). Clockwise is +ve.
         # Pitch: rotation around X-axis (up-down). Upwards is +ve.
+        self.RADAR_HEIGHT = 1
         self.SENSOR_YAW = 0
         self.SENSOR_PITCH = 0
         self.SENSITIVITY = 1
@@ -212,10 +213,10 @@ class radar_config_params:
                 "boundaryBox -2.5 2.5 0.5 6 0 3",
                 "sensorPosition 1.2 0 0",
                 "gatingParam 3 2 2 2 4",    # 25
-                "stateParam 20 3 200 500 50 6000",
-                "allocationParam 80 200 0.1 40 0.5 20",
+                "stateParam 3 3 200 5000 50 60000",
+                "allocationParam 40 100 0.1 20 0.5 20",
                 "maxAcceleration 0.1 0.1 0.1",
-                "trackingCfg 1 2 800 20 46 96 55",
+                "trackingCfg 1 2 800 15 46 96 55",
                 "presenceBoundaryBox -4 4 0.5 6 0 3",   # 30
                 "sensorStart"
                 ]
@@ -293,6 +294,13 @@ class radar_config_params:
 
             self.RADAR_CAL = temp
             print(self.RADAR_CAL)
+
+        if "sensorPosition" in raw:
+            temp = raw[len("sensorPosition")+1:]
+            temp = temp.split(" ")
+
+            self.RADAR_HEIGHT = temp[0]
+            print(self.RADAR_HEIGHT)
 
 
 # Parse updated sensor configuration file #
@@ -392,6 +400,25 @@ def parse_config(config_file, entry_ways, rcp, cp, client):
             param_temp[11] = str(round(np.exp(0.5/float(rcp.SENSITIVITY)+3)))
             rcp.config_radar[10] = " ".join(param_temp)
             logging.debug(rcp.config_radar[10])
+
+        # Radar positioning - 24 #
+        if sv.radar_dim == 3:
+            i = 0
+            while True:
+                if i == len(rcp.config_radar):
+                    logging.warning("Config error: {} not found!)".format("sensorPosition "))
+                    break
+                elif "sensorPosition " in rcp.config_radar[i]:  
+                    param_temp = rcp.config_radar[i].split(" ")
+                    temp_h = rcp.RADAR_HEIGHT
+                    temp_az = param_temp[2]
+                    temp_el = param_temp[3]
+                    param_temp[1] = temp_h
+                    rcp.config_radar[i] = " ".join(param_temp)
+                    logging.debug(rcp.config_radar[i])
+                    break
+                else:
+                    i+=1
          
         # Room size #
         if sv.radar_dim == 2:
