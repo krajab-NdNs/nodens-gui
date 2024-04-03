@@ -48,6 +48,7 @@ from os.path import dirname, join as pjoin
 from pathlib import Path
 import logging
 import csv
+import requests
 import nodens_fns as ndns_fns
 import nodens_mesh as ndns_mesh
 import nodens_gcp as ndns_gcp
@@ -61,9 +62,9 @@ global json_data
 global frame_num
 global data10
 global size
-global mqttDataN, mqttData_SAVE, idx_mqtt
+global mqttDataN, mqttData_SAVE
 global frame_last
-global T
+global T, T0, T1
 global L6
 global nTLV
 global client
@@ -87,12 +88,12 @@ frame_num = []
 frame_num2 = []
 frame_last = 0
 T = datetime.datetime.now()
+T0 = ""
 L6 = []
 nTLV = []
 track11 = []
 mqttData_SAVE = []
 mqttData_SAVEFull = []
-idx_mqtt = 0
 idx_write = 0
 idx_file_refresh = 0
 heartbeat = ""
@@ -113,328 +114,287 @@ sm = ndns_fns.SensorMesh()
 #logging.basicConfig(level=logging.info)
 
 # MQTT Message callback function #
-def on_message_sensorN(client, userdata, msg):
-
-    #getting data from mqtt
-    global mqttDataN
-    global mqttData_SAVE
-
-    global T
-    global idx_mqtt, idx_write, idx_file_refresh
-    global file_save, file_time
-    global root
-    global dsensor
-    global topology_len_prev
-    global topology
-    global parent_child
-    global temp
-    global mqttData_SAVE, mqttData_SAVEFull
-    global T_jwt_refresh
-    global heartbeat
-
-    global si, sv, sd, sts, sm
-    global cfg_idx
-    global config_msg
+def on_message_sensor(client, userdata, msg):
 
     #getting data from mqtt
     mqttDataN = (msg.payload)
     mqttData = json.loads(mqttDataN)
-    
-    # Get time
-    T = datetime.datetime.utcnow()
-    
-    json_data = []
-    # MAC ADDRESS defined by user
-    # ----------- #       
-    #sensor_number = ndns_fns.cp.SENSOR_ID
 
-    
-    # ---- Parse Data ---- #
-    
-    idx_mqtt += 1
-    idx_write += 1
-    
-    try:
-        N = int(msg.topic[-1])
-    except:
-        N = 0
-    
-    if 'addr' in mqttData:
-        #try:
-        sen_idx = si.check(mqttData)
+# Read from server #
+def poll_server(url):
+    global si, sv, sd, sts, sm
+    global T0, T1
+    global idx_write
 
-        # Check if command is received
-        if mqttData['data'][0:3] == "CMD":
-            print("Command verified: {}".format(mqttData['data']))
-        
-        # Parse data
-        else:
-            data = base64.b64decode(mqttData['data'])
-
-            str_data = str(data[0])
-            data_int = [data[0]]
-            for i in range(7):
-                str_data = str_data + str(data[i+1])
-                data_int.append(data[i+1])
+    mqttData = requests.get(url).json()
+    print(f"{mqttData}")
+    if 'timestamp' in mqttData:
+        T1 = mqttData['timestamp']
+        if T1 != T0:
+            T0 = T1
     
-            # Check if full data packet received
-            if str_data == '21436587':
-                for i in range(len(data)-8):
-                    data_int.append(data[i+8])
-                mqttDataFinal = mqttData
+            # ---- Parse Data ---- #
             
-                # Parse TLVs
-                sd.update(3, data_int, 5)
-                sts.update(sd,1000)
-                ndns_fns.class_eng.framewise_calculation(sd, 0)
-                ndns_fns.class_eng.classify()
+            idx_write += 1
+            
+            
+            if 'addr' in mqttData:
+                #try:
+                sen_idx = si.check(mqttData)
 
-                heartbeat += "F"
-                heartbeat = "\r" + heartbeat
-                #print(heartbeat, end='')
-                si.last_t[sen_idx] = T
-                mqttDataTemp = [T.strftime("%Y-%m-%dT%H:%M:%S.%fZ")]
-                mqttDataTemp.append(mqttData['addr'])
-                mqttDataTemp.append(str(sd.frame))
-                mqttDataTemp.append(mqttData['data'])
-                mqttData_SAVEFull.append(mqttDataTemp)
-
-                ##~~~~~~~~ Publish to Cloud ~~~~~~~~##
-                if ((T - si.period_t[sen_idx]).total_seconds() > ndns_fns.cp.CLOUD_WRITE_TIME):
-                    mqttTime = json.loads("{\"Time\": \"" + str(T) + "\"}")
-                    mqttDataFinal = {**mqttTime, **mqttData}
-                    if ndns_fns.cp.ENABLE_GCP:
-                        ndns_gcp.gateway_state.mqtt_topic = '/devices/' + ndns_fns.cp.MQTT_TOPIC + '/events'
-                        gcp_payload = json.dumps(mqttDataFinal)
-                        ndns_gcp.send_data_from_bound_device(ndns_gcp.client_gcp, ndns_fns.cp, ndns_gcp.gateway_state, 1, gcp_payload, T_jwt_refresh)
-                        print("WRITING RAW DATA TO GCP! T:{} si.period_t:{}".format(T, si.period_t[sen_idx]))
-
-            # Otherwise process occupancy info
-            else:
-                sm.update(mqttData)
-                #print("Sensors: {}. Roots: {}. T: {}".format(sm.sensor_id, sm.root_id, sm.last_time_connected))
-                mqttOcc = json.loads(data)
-                mqttTime = json.loads("{\"Time\": \"" + str(T) + "\"}")
-                mqttDataFinal = {**mqttTime, **mqttData, **mqttOcc}
-                si.last_t[sen_idx] = T
-                #mqttData_SAVE.append(mqttOcc)
+                # Check if command is received
+                if 'data' in mqttData:
+                    if mqttData['data'][0:3] == "CMD":
+                        print("Command verified: {}".format(mqttData['data']))
                 
-                if ('Number of Occupants' in mqttDataFinal):
-                    mqttDataTemp = [T.strftime("%Y-%m-%dT%H:%M:%S.%fZ")]
-                    mqttDataTemp.append(mqttData['addr'])
-                    si.num_occ[sen_idx] = mqttDataFinal['Number of Occupants']
-                    mqttDataTemp.append(mqttDataFinal['Number of Occupants'])
-
-                    if ('Occupancy Info' in mqttDataFinal):
-                        mqttOccInfo = mqttDataFinal['Occupancy Info']
-                        for i in range(min(si.num_occ[sen_idx],2)):
-                            mqttDataTemp.append(mqttOccInfo[i]['Occupant ID'])
-                            mqttDataTemp.append(mqttOccInfo[i]['X'])
-                            mqttDataTemp.append(mqttOccInfo[i]['Y'])
-                            mqttDataTemp.append(mqttOccInfo[i]['Z'])
-                        while 1:
-                            if i < 1:
-                                for j in range(4):
-                                    mqttDataTemp.append('')
-                                i += 1
-                            else:
-                                break
-
-                        if 'Heatmap energy' in mqttOccInfo[-1]:
-                            mqttDataTemp.append(mqttOccInfo[-1]['Heatmap energy'])
-                            mqttDataTemp.append(mqttOccInfo[-1]['Heatmap'])
-                        else:
-                            mqttDataTemp.append(0)
-                            mqttDataTemp.append('')
+                # Parse data
+                else:
+                    if 'data' in mqttData:
+                        data = base64.b64decode(mqttData['data'])
                     else:
-                        for i in range(8):
-                            mqttDataTemp.append('')
-                        mqttDataTemp.append(0)
-                        mqttDataTemp.append('')
+                        data = mqttData
 
-                    mqttData_SAVE.append(mqttDataTemp)
+                    try:
+                        str_data = str(data[0])
+                        data_int = [data[0]]
+                        for i in range(7):
+                            str_data = str_data + str(data[i+1])
+                            data_int.append(data[i+1])
+                    except:
+                        str_data = ''
+            
+                    # Check if full data packet received
+                    if str_data == '21436587':
+                        for i in range(len(data)-8):
+                            data_int.append(data[i+8])
+                        mqttDataFinal = mqttData
                     
+                        # Parse TLVs
+                        sd.update(3, data_int, 5)
+                        sts.update(sd,1000)
+                        ndns_fns.class_eng.framewise_calculation(sd, 0)
+                        ndns_fns.class_eng.classify()
 
-                    # Update max number of occupants
-                    if (si.num_occ[sen_idx] > si.max_occ[sen_idx]):
-                        si.max_occ[sen_idx] = si.num_occ[sen_idx]
-                    # If there are occupants, what are their locations?
-                    if (si.num_occ[sen_idx] > 0):
-                        try:
-                            occ_info = mqttDataFinal['Occupancy Info']
-                        except:
-                            occ_info = mqttDataFinal['Occupancy Info'][0]
-                        # logging.debug('OCCUPANCY INFO')
-                        for i in range(len(occ_info)):      # NodeNs FIX KZR: update ESP to create new payload
-                            temp = occ_info[i]
-                            oh.update(mqttData['addr'],int(temp['Occupant ID']),temp['X'],temp['Y'])
-                            # Check if occupant has crossed entryway
-                            oh.entryway(mqttData['addr'],int(temp['Occupant ID']),ew)
-                            # logging.debug('Occupant no.: {}. X: {}. Y = {}.'.format(temp['Occupant ID'],temp['X'],temp['Y']))
-                    # Update time period occupancy data
-                    if mqttData['addr'] not in ew.id:
-                        ew.update(mqttData['addr'])
-                    send_idx_e = ew.id.index(mqttData['addr'])
+                        heartbeat += "F"
+                        heartbeat = "\r" + heartbeat
+                        #print(heartbeat, end='')
+                        si.last_t[sen_idx] = T
+                        mqttDataTemp = [T.strftime("%Y-%m-%dT%H:%M:%S.%fZ")]
+                        mqttDataTemp.append(mqttData['addr'])
+                        mqttDataTemp.append(str(sd.frame))
+                        mqttDataTemp.append(mqttData['data'])
+                        mqttData_SAVEFull.append(mqttDataTemp)
 
-                    ##~~~~~~~~ Publish to Cloud ~~~~~~~~##
-                    if ((T - si.period_t[sen_idx]).total_seconds() > ndns_fns.cp.CLOUD_WRITE_TIME):
-                        mqttDataFinal = {**mqttDataFinal, 'Average period occupancy' : si.period_sum_occ[sen_idx]/si.period_N[sen_idx], 'Maximum period occupancy' : si.period_max_occ[sen_idx],
-                                         'Average entryway occupancy' : si.ew_period_sum_occ[sen_idx]/si.period_N[sen_idx], 'Maximum entryway occupancy' : si.ew_period_max_occ[sen_idx]}
-                        if ndns_fns.cp.ENABLE_GCP:
-                            ndns_gcp.gateway_state.mqtt_topic = '/devices/' + ndns_fns.cp.MQTT_TOPIC + '/events'
-                            gcp_payload = json.dumps(mqttDataFinal)
-                            ndns_gcp.send_data_from_bound_device(ndns_gcp.client_gcp, ndns_fns.cp, ndns_gcp.gateway_state, 1, gcp_payload, T_jwt_refresh)
-                            print("WRITING TO GCP! T:{} si.period_t:{}".format(T, si.period_t[sen_idx]))
+                        ##~~~~~~~~ Publish to Cloud ~~~~~~~~##
+                        if ((T - si.period_t[sen_idx]).total_seconds() > ndns_fns.cp.CLOUD_WRITE_TIME):
+                            mqttTime = json.loads("{\"Time\": \"" + str(T) + "\"}")
+                            mqttDataFinal = {**mqttTime, **mqttData}
+                            if ndns_fns.cp.ENABLE_GCP:
+                                ndns_gcp.gateway_state.mqtt_topic = '/devices/' + ndns_fns.cp.MQTT_TOPIC + '/events'
+                                gcp_payload = json.dumps(mqttDataFinal)
+                                ndns_gcp.send_data_from_bound_device(ndns_gcp.client_gcp, ndns_fns.cp, ndns_gcp.gateway_state, 1, gcp_payload, T_jwt_refresh)
+                                print("WRITING RAW DATA TO GCP! T:{} si.period_t:{}".format(T, si.period_t[sen_idx]))
 
-                        si.period_t[sen_idx] = T
-                        si.period_N[sen_idx] = 1
-                        si.period_sum_occ[sen_idx] = si.num_occ[sen_idx]
-                        si.period_max_occ[sen_idx] = si.num_occ[sen_idx]
-                        si.ew_period_sum_occ[sen_idx] = ew.count[send_idx_e]
-                        si.ew_period_max_occ[sen_idx] = ew.count[send_idx_e]
-                        heartbeat = ""
+                    # Otherwise process occupancy info
                     else:
-                        si.period_N[sen_idx] += 1
-                        si.period_sum_occ[sen_idx] += si.num_occ[sen_idx]
-                        si.ew_period_sum_occ[sen_idx] += ew.count[send_idx_e]
-                        if (si.num_occ[sen_idx] > si.period_max_occ[sen_idx]):
-                            si.period_max_occ[sen_idx] = si.num_occ[sen_idx]
-                        if (ew.count[send_idx_e] > si.ew_period_max_occ[sen_idx]):
-                            si.ew_period_max_occ[sen_idx] = ew.count[send_idx_e]
-
-                else:
-                    si.num_occ[sen_idx] = 0
-        
-                if mqttDataFinal['type'] == 'bytes':
-                    si.last_t[sen_idx] = T
-                    heartbeat += "+"
-                    heartbeat = "\r" + heartbeat
-                    # print(heartbeat, end='')
-                    if 'Sensor Information' in mqttDataFinal:
-                        print("\nSensor information: {} for Device: {}\n". format(mqttDataFinal['Sensor Information'], mqttDataFinal['addr']))
-
-                        # Check for sensor version
-                        temp = mqttDataFinal['Sensor Information']
+                        sm.update(mqttData)
+                        #print("Sensors: {}. Roots: {}. T: {}".format(sm.sensor_id, sm.root_id, sm.last_time_connected))
+                        mqttOcc = json.loads(data)
+                        mqttTime = json.loads("{\"Time\": \"" + str(T) + "\"}")
+                        mqttDataFinal = {**mqttTime, **mqttData, **mqttOcc}
+                        si.last_t[sen_idx] = T
+                        #mqttData_SAVE.append(mqttOcc)
                         
-                        if temp[0:7] == 'VERSION':
-                            ndns_fns.sv.parse(temp[9:])
+                        if ('Number of Occupants' in mqttDataFinal):
+                            mqttDataTemp = [T.strftime("%Y-%m-%dT%H:%M:%S.%fZ")]
+                            mqttDataTemp.append(mqttData['addr'])
+                            si.num_occ[sen_idx] = mqttDataFinal['Number of Occupants']
+                            mqttDataTemp.append(mqttDataFinal['Number of Occupants'])
 
-                        elif temp[0:6] == 'CONFIG':
-                            ndns_fns.rcp.receive_config(temp[8:])
+                            if ('Occupancy Info' in mqttDataFinal):
+                                mqttOccInfo = mqttDataFinal['Occupancy Info']
+                                for i in range(min(si.num_occ[sen_idx],2)):
+                                    mqttDataTemp.append(mqttOccInfo[i]['Occupant ID'])
+                                    mqttDataTemp.append(mqttOccInfo[i]['X'])
+                                    mqttDataTemp.append(mqttOccInfo[i]['Y'])
+                                    mqttDataTemp.append(mqttOccInfo[i]['Z'])
+                                while 1:
+                                    if i < 1:
+                                        for j in range(4):
+                                            mqttDataTemp.append('')
+                                        i += 1
+                                    else:
+                                        break
 
-                        elif temp[0:3] == 'MSG':
-                            ndns_mesh.MESH.status.receive_msg(temp, mqttDataFinal['timestamp'])
-                            ndns_mesh.MESH.status.receive_info(temp, mqttDataFinal['timestamp'])
-                            if ndns_mesh.MESH.status.last_msg.find("NEW CONFIG!") >= 0:
-                                msg = ndns_mesh.MESH.status.last_msg
-                                i0 = msg.find("X=")
-                                i1 = msg[i0:].find(",")
-                                i2 = msg[i0:].find(")")
+                                if 'Heatmap energy' in mqttOccInfo[-1]:
+                                    mqttDataTemp.append(mqttOccInfo[-1]['Heatmap energy'])
+                                    mqttDataTemp.append(mqttOccInfo[-1]['Heatmap'])
+                                else:
+                                    mqttDataTemp.append(0)
+                                    mqttDataTemp.append('')
+                            else:
+                                for i in range(8):
+                                    mqttDataTemp.append('')
+                                mqttDataTemp.append(0)
+                                mqttDataTemp.append('')
 
-                                ndns_fns.rcp.ROOM_X_MIN = (msg[i0+3:i0+i1])
-                                ndns_fns.rcp.ROOM_X_MAX = (msg[i0+i1+1:i0+i2])
+                            mqttData_SAVE.append(mqttDataTemp)
+                            
 
-                                i0 = (msg.find("Y="))
-                                i1 = (msg[i0:].find(","))
-                                i2 = msg[i0:].find(")")
-
-                                ndns_fns.rcp.ROOM_Y_MIN = (msg[i0+3:i0+i1])
-                                ndns_fns.rcp.ROOM_Y_MAX = (msg[i0+i1+1:i0+i2])
+                            # Update max number of occupants
+                            if (si.num_occ[sen_idx] > si.max_occ[sen_idx]):
+                                si.max_occ[sen_idx] = si.num_occ[sen_idx]
+                            # If there are occupants, what are their locations?
+                            if (si.num_occ[sen_idx] > 0):
+                                try:
+                                    occ_info = mqttDataFinal['Occupancy Info']
+                                except:
+                                    occ_info = mqttDataFinal['Occupancy Info'][0]
+                                # logging.debug('OCCUPANCY INFO')
+                                for i in range(len(occ_info)):      # NodeNs FIX KZR: update ESP to create new payload
+                                    temp = occ_info[i]
+                                    oh.update(mqttData['addr'],int(temp['Occupant ID']),temp['X'],temp['Y'])
+                                    # Check if occupant has crossed entryway
+                                    oh.entryway(mqttData['addr'],int(temp['Occupant ID']),ew)
+                                    # logging.debug('Occupant no.: {}. X: {}. Y = {}.'.format(temp['Occupant ID'],temp['X'],temp['Y']))
+                            # Update time period occupancy data
+                            if mqttData['addr'] not in ew.id:
+                                ew.update(mqttData['addr'])
+                            send_idx_e = ew.id.index(mqttData['addr'])
 
                         else:
-                            ndns_mesh.MESH.status.receive_info(temp, mqttDataFinal['timestamp'])
-               
-                elif mqttDataFinal['type'] == 'heartbeat':
-                    heartbeat += "."
-                    heartbeat = "\r" + heartbeat
-                    #print(heartbeat, end='')
-                else:
-                    logging.warning("Another type: {}".format(mqttDataFinal))
-  
-            ##~~~~~~~~ JWT refresh process ~~~~~~~~##
-            seconds_since_issue = (datetime.datetime.now(tz=datetime.timezone.utc) - T_jwt_refresh).seconds
+                            si.num_occ[sen_idx] = 0
+                
+                        if mqttDataFinal['type'] == 'bytes':
+                            si.last_t[sen_idx] = T
+                            heartbeat += "+"
+                            heartbeat = "\r" + heartbeat
+                            # print(heartbeat, end='')
+                            if 'Sensor Information' in mqttDataFinal:
+                                print("\nSensor information: {} for Device: {}\n". format(mqttDataFinal['Sensor Information'], mqttDataFinal['addr']))
 
-            if seconds_since_issue > 60 * ndns_fns.cp.JWT_TIME_MINS and ndns_fns.cp.ENABLE_GCP:
-                print("Refreshing token after {}s at {}".format(seconds_since_issue, str(datetime.datetime.now(tz=datetime.timezone.utc))))
-                T_jwt_refresh = datetime.datetime.now(tz=datetime.timezone.utc)
-                try:
-                    ndns_gcp.detach_device(client, ndns_fns.cp.MQTT_TOPIC)
-                    ndns_gcp.client_gcp.loop_stop()
-                    time.sleep(1)
-                    ndns_gcp.client_gcp.disconnect()
-                    ndns_gcp.client_gcp = ndns_gcp.listen_for_messages(
-                        ndns_fns.cp,
-                        ndns_gcp.gateway_state,
-                        2,
-                        cb=None,
-                    )
-                except:
-                    print("JWT refresh failed")
+                                # Check for sensor version
+                                temp = mqttDataFinal['Sensor Information']
+                                
+                                if temp[0:7] == 'VERSION':
+                                    ndns_fns.sv.parse(temp[9:])
 
-            ##~~~~~~~~ Print info to screen process ~~~~~~~##
-            # removed
+                                elif temp[0:6] == 'CONFIG':
+                                    ndns_fns.rcp.receive_config(temp[8:])
 
+                                elif temp[0:3] == 'MSG':
+                                    ndns_mesh.MESH.status.receive_msg(temp, mqttDataFinal['timestamp'])
+                                    ndns_mesh.MESH.status.receive_info(temp, mqttDataFinal['timestamp'])
+                                    if ndns_mesh.MESH.status.last_msg.find("NEW CONFIG!") >= 0:
+                                        msg = ndns_mesh.MESH.status.last_msg
+                                        i0 = msg.find("X=")
+                                        i1 = msg[i0:].find(",")
+                                        i2 = msg[i0:].find(")")
+
+                                        ndns_fns.rcp.ROOM_X_MIN = (msg[i0+3:i0+i1])
+                                        ndns_fns.rcp.ROOM_X_MAX = (msg[i0+i1+1:i0+i2])
+
+                                        i0 = (msg.find("Y="))
+                                        i1 = (msg[i0:].find(","))
+                                        i2 = msg[i0:].find(")")
+
+                                        ndns_fns.rcp.ROOM_Y_MIN = (msg[i0+3:i0+i1])
+                                        ndns_fns.rcp.ROOM_Y_MAX = (msg[i0+i1+1:i0+i2])
+
+                                else:
+                                    ndns_mesh.MESH.status.receive_info(temp, mqttDataFinal['timestamp'])
+                    
+                        elif mqttDataFinal['type'] == 'heartbeat':
+                            heartbeat += "."
+                            heartbeat = "\r" + heartbeat
+                            #print(heartbeat, end='')
+                        else:
+                            logging.warning("Another type: {}".format(mqttDataFinal))
         
-            ##~~~~~~~~ Save data to disk ~~~~~~~##
-            if (idx_write > 200 and ndns_fns.cp.WRITE_FLAG == 1):
+                    ##~~~~~~~~ JWT refresh process ~~~~~~~~##
+                    seconds_since_issue = (datetime.datetime.now(tz=datetime.timezone.utc) - T_jwt_refresh).seconds
 
-                if len(mqttData_SAVE) > 0:
-                    with open(file_save + file_time + ".csv", "a", newline='') as filehandle:
-                        writer = csv.writer(filehandle)
+                    if seconds_since_issue > 60 * ndns_fns.cp.JWT_TIME_MINS and ndns_fns.cp.ENABLE_GCP:
+                        print("Refreshing token after {}s at {}".format(seconds_since_issue, str(datetime.datetime.now(tz=datetime.timezone.utc))))
+                        T_jwt_refresh = datetime.datetime.now(tz=datetime.timezone.utc)
+                        try:
+                            ndns_gcp.detach_device(client, ndns_fns.cp.MQTT_TOPIC)
+                            ndns_gcp.client_gcp.loop_stop()
+                            time.sleep(1)
+                            ndns_gcp.client_gcp.disconnect()
+                            ndns_gcp.client_gcp = ndns_gcp.listen_for_messages(
+                                ndns_fns.cp,
+                                ndns_gcp.gateway_state,
+                                2,
+                                cb=None,
+                            )
+                        except:
+                            print("JWT refresh failed")
+
+                    ##~~~~~~~~ Print info to screen process ~~~~~~~##
+                    # removed
+
+                
+                    ##~~~~~~~~ Save data to disk ~~~~~~~##
+                    if (idx_write > 200 and ndns_fns.cp.WRITE_FLAG == 1):
+
+                        if len(mqttData_SAVE) > 0:
+                            with open(file_save + file_time + ".csv", "a", newline='') as filehandle:
+                                writer = csv.writer(filehandle)
 
 
-                        # write the data
-                        writer.writerows(mqttData_SAVE)
+                                # write the data
+                                writer.writerows(mqttData_SAVE)
 
-                    filehandle.close()
+                            filehandle.close()
 
-                if len(mqttData_SAVEFull) > 0:
-                    with open(file_save + file_time + "_FULL.csv", "a", newline='') as filehandle:
-                        writer = csv.writer(filehandle)
+                        if len(mqttData_SAVEFull) > 0:
+                            with open(file_save + file_time + "_FULL.csv", "a", newline='') as filehandle:
+                                writer = csv.writer(filehandle)
 
-                        # write the header
-                        #writer.writerow(header)
+                                # write the header
+                                #writer.writerow(header)
 
-                        # write the data
-                        writer.writerows(mqttData_SAVEFull)
+                                # write the data
+                                writer.writerows(mqttData_SAVEFull)
 
-                    filehandle.close()
+                            filehandle.close()
 
-                #logging.debug("WRITE!")
-                #dsensor.set("WRITE!")
+                        #logging.debug("WRITE!")
+                        #dsensor.set("WRITE!")
 
-                # Reset write count
-                idx_write = 0
-                mqttData_SAVE = []
-                mqttData_SAVEFull = []
+                        # Reset write count
+                        idx_write = 0
+                        mqttData_SAVE = []
+                        mqttData_SAVEFull = []
 
-                # New file
-                if idx_file_refresh >= 2000:
-                    print("idx: {}".format(idx_file_refresh))
-                    idx_file_refresh = 0
+                        # New file
+                        if idx_file_refresh >= 2000:
+                            print("idx: {}".format(idx_file_refresh))
+                            idx_file_refresh = 0
 
-            if (idx_file_refresh == 0 and ndns_fns.cp.WRITE_FLAG == 1):
-                print("NEW HEADER: {}".format(idx_file_refresh))
-                file_time = (T.strftime("%Y") + T.strftime("%m") + 
-                              T.strftime("%d") + T.strftime("%H") + T.strftime("%M"))
-                header = ['Time', 'Addr', 'num_occ', 'tid1', 'x1','y1','z1','tid2','x2','y2','z2','e', 'heatmap']                
-                with open(file_save + file_time + ".csv", "a", newline='') as filehandle:
-                    writer = csv.writer(filehandle)
-                    # write the header
-                    writer.writerow(header)
-                filehandle.close()
+                    if (idx_file_refresh == 0 and ndns_fns.cp.WRITE_FLAG == 1):
+                        print("NEW HEADER: {}".format(idx_file_refresh))
+                        file_time = (T.strftime("%Y") + T.strftime("%m") + 
+                                    T.strftime("%d") + T.strftime("%H") + T.strftime("%M"))
+                        header = ['Time', 'Addr', 'num_occ', 'tid1', 'x1','y1','z1','tid2','x2','y2','z2','e', 'heatmap']                
+                        with open(file_save + file_time + ".csv", "a", newline='') as filehandle:
+                            writer = csv.writer(filehandle)
+                            # write the header
+                            writer.writerow(header)
+                        filehandle.close()
 
-                header = ['Time', 'Addr', 'Frame', 'Full data']   
-                with open(file_save + file_time + "_FULL.csv", "a", newline='') as filehandle:
-                    writer = csv.writer(filehandle)
-                    # write the header
-                    writer.writerow(header)
-                filehandle.close()
+                        header = ['Time', 'Addr', 'Frame', 'Full data']   
+                        with open(file_save + file_time + "_FULL.csv", "a", newline='') as filehandle:
+                            writer = csv.writer(filehandle)
+                            # write the header
+                            writer.writerow(header)
+                        filehandle.close()
 
-        #except:
-        #    pass
+                #except:
+                #    pass
 
-    idx_file_refresh += 1
+            idx_file_refresh += 1
 
             
 
@@ -567,98 +527,6 @@ class DrawingScreen(Screen):
         self._window_size = Window.size
         print(f"DS WS. {self._window_size}")
 
-        #self.canvas.before.add(Color(1, 1, 0.9, 0.7))  # Set canvas color
-        #self.canvas.before.add(Label(text='0 m', pos=(0.3*self._window_size[0], 0.1*self._window_size[1]), size=(0.65*self._window_size[0], 0.8*self._window_size[1])))  # Draw a rectangle
-        
-        #self.bind(on_touch_down=self.on_touch_down)
-
-    #     self._drawing_state = 1
-    #     self._drawing_init = 1
-    #     self._touch = []
-    #     self.line = []
-    #     self.zone_type = "safe"
-    #     self.zone_color = [0,1,0,1]
-        
-    #     #self.bind(pos=self.update_canvas, size=self.update_canvas)
-
-
-    # def on_touch_down(self, _touch):
-    #     try:
-    #         if False == True:
-    #             pass
-    #         else:
-    #             with self.canvas:
-    #                 #print(self.zone_color)
-    #                 Color(self.zone_color[0],self.zone_color[1],self.zone_color[2],self.zone_color[3])
-    #                 if (_touch.x >= self._area_pos[0]) & (_touch.x <= self._area_pos[0]+self._area_size[0]):
-    #                     if (_touch.y >= self._area_pos[1]) & (_touch.y <= self._area_pos[1]+self._area_size[1]):
-    #                         if self._drawing_state == 0:
-    #                             if self._drawing_init == 1:
-    #                                 #self.line.append(Rectangle(xy=(_touch.x, _touch.y), width=100, height=100))
-    #                                 self.line.append(kv_Rectangle(pos=(_touch.x, _touch.y), size=(100, 100), width=2, rgba=self.zone_color))
-    #                                 self._drawing_init = 0
-    #                             else:
-    #                                 temp_x = _touch.x - self.line[-1].pos[0]
-    #                                 temp_y = _touch.y - self.line[-1].pos[1]
-    #                                 self.line[-1].size = (temp_x, temp_y)
-    #                                 # temp_x = _touch.x - self.line[-1].xy[0]
-    #                                 # temp_y = _touch.y - self.line[-1].xy[1]
-    #                                 # self.line[-1].width = temp_x
-    #                                 # self.line[-1].height = temp_y
-    #                         elif self._drawing_state == 1:
-    #                             if self._drawing_init == 1:
-    #                                 self.line.append(Line(points=[_touch.x, _touch.y], width=2))
-    #                                 self._touch = _touch
-    #                                 self._drawing_init = 0
-    #                             else:
-    #                                 self.line[-1].points += (_touch.x, _touch.y)
-    #                         elif self._drawing_state == 2:
-    #                             if self._drawing_init == 1:
-    #                                 self.line.append(Bezier(points=[_touch.x, _touch.y], width=20))
-    #                                 self._touch = _touch
-    #                                 self._drawing_init = 0
-    #                                 print(f"Arc 0. x:{self.line[-1].points[0]}. y:{self.line[-1].points[1]}")
-    #                             else:
-    #                                 self.line[-1].points += (_touch.x, _touch.y)
-
-    #                         else:
-
-    #                             if self._drawing_init == 1:
-    #                                 self.line.append(Line(points=[_touch.x, _touch.y], width=2))
-    #                                 self._drawing_init = 0
-    #                             else:
-    #                                 self.line[-1].points += (_touch.x, _touch.y)
-
-    #                 #print(f"on__touch_down. (x,y): ({_touch.ud["line"].points})")
-    #     except Exception as e: print(e)
-    #     return super(DrawingScreen, self).on_touch_down(_touch)
-
-    # def on_touch_move(self, _touch):
-    #     if False == True:
-    #         pass
-    #     else:
-    #         if (_touch.x >= self._area_pos[0]) & (_touch.x <= self._area_pos[0]+self._area_size[0]):
-    #                 if (_touch.y >= self._area_pos[1]) & (_touch.y <= self._area_pos[1]+self._area_size[1]):
-    #                     if self._drawing_init == 0:
-    #                         if self._drawing_state == 0:    # rectangle
-    #                             temp_x = _touch.x - self.line[-1].pos[0]
-    #                             temp_y = _touch.y - self.line[-1].pos[1]
-    #                             self.line[-1].size = (temp_x, temp_y)
-    #                         elif self._drawing_state == 1:  # line
-    #                             pass
-    #                         elif self._drawing_state == 2:  # arc
-    #                             self.line[-1].points += (_touch.x, _touch.y)
-    #                         elif self._drawing_state == 3:  # free
-    #                             self.line[-1].points += (_touch.x, _touch.y)
-    #                         else:
-    #                             self.line[-1].points += (_touch.x, _touch.y)
-    #                     else:
-    #                         if self._drawing_state == 3:
-    #                             self.line.append(Line(points=[_touch.x, _touch.y], width=2))
-    #                             self._drawing_init = 0
-
-    #     return super(DrawingScreen, self).on_touch_down(_touch)
-
     
     def on_window_resize(self, window, width, height):
         self._window_size = Window.size
@@ -745,11 +613,6 @@ class NodeNsUpdateProcedure(Widget):
     ai_room_config = ObjectProperty(None)
     text_room_config = ObjectProperty(None)
 
-    #loadfile = ObjectProperty(None)
-    #savefile = ObjectProperty(None)
-    #text_input = ObjectProperty(None)
-    #filechooser = ObjectProperty(None)
-
     ud_len = 40
     ud_num_chirps = 64
     ud_idx = 0
@@ -786,16 +649,12 @@ class NodeNsUpdateProcedure(Widget):
     boundary_xy = []
     border_xy = [0.25,0.5,0.1,0.8]
     
-    
-    #player1 = ObjectProperty(None)
-    #player2 = ObjectProperty(None)
 
     def initialise(self):
         print("initialise")
         global ud_x, ud_y, ud_z, sd, file_save, T_jwt_refresh
         self.led_1.center = self.center
         sd = ndns_fns.parseTLV(3)
-        #cp = ndns_fns.config_params()
 
         x = np.array([0])
         y = np.array([1])
@@ -859,19 +718,7 @@ class NodeNsUpdateProcedure(Widget):
         self.ids.sensor_spinner.text = "Not connected..."
         self.ids.sensor_spinner.values = ["None"]
 
-        ##~~~~~~~~ Initialise GCP (Cloud) connection ~~~~~~~~##
-        T_jwt_refresh = datetime.datetime.now(tz=datetime.timezone.utc)
 
-        # Connect to the Google MQTT bridge.
-        ndns_gcp.gateway_state.mqtt_config_topic = '/devices/' + ndns_fns.cp.MQTT_GATEWAY + '/config'
-        ndns_gcp.gateway_state.mqtt_error_topic = '/devices/' + ndns_fns.cp.MQTT_GATEWAY + '/errors'
-        ndns_gcp.gateway_state.mqtt_command_topic = '/devices/{}/commands/#'.format(ndns_fns.cp.MQTT_GATEWAY)
-
-        ndns_gcp.gateway_state.mqtt_bridge_hostname = 'mqtt.googleapis.com'
-        ndns_gcp.gateway_state.mqtt_bridge_port = 8883
-
-        
-        
         levels = MaxNLocator(nbins=15).tick_values(ud_z.min(), ud_z.max())
 
         # pick the desired colormap, sensible levels, and define a normalization
@@ -1015,6 +862,8 @@ class NodeNsUpdateProcedure(Widget):
 
     def update(self, dt):
         global sts, UD12, sd
+
+        poll_server("http://10.3.141.1:8000")
 
         # PLOT: Micro-Doppler spectrum
         #levels = MaxNLocator(nbins=15).tick_values(sd.ud_sig.min(), sd.ud_sig.max())
@@ -1226,6 +1075,13 @@ class NodeNsUpdateProcedure(Widget):
             plt.title('Number of points')
             self.box_5.add_widget(FigureCanvasKivyAgg(self.fig5))
    
+        
+
+    def update_mon_zone(self, dt):
+        global sd
+
+        poll_server("http://10.3.141.1:8000")
+
         ## ~~~~~~~ Monitoring zone point cloud ~~~~~~~ ##
 
         self.box_monitoring_zone.clear_widgets()
@@ -1316,7 +1172,7 @@ class NodeNsUpdateProcedure(Widget):
         ##~~~~~~~~ Connect to sensor mesh MQTT ~~~~~~~~##
         ndns_mesh.MESH.end()
         print("CHECK: {}".format(ndns_fns.cp.SENSOR_TOPIC))
-        ndns_mesh.MESH.connect(ndns_fns.cp.SENSOR_IP,ndns_fns.cp.SENSOR_PORT,60,ndns_fns.cp.SENSOR_TOPIC,on_message_sensorN) 
+        ndns_mesh.MESH.connect(ndns_fns.cp.SENSOR_IP,ndns_fns.cp.SENSOR_PORT,60,ndns_fns.cp.SENSOR_TOPIC,on_message_sensor) 
 
         self.ids.led_connect.color = [1, 0.75, 0, 1]
 
@@ -1362,11 +1218,8 @@ class NodeNsUpdateProcedure(Widget):
 
         #ndns_fns.sv.request(ndns_mesh.MESH.client, ndns_fns.rcp.SENSOR_TOPIC, ndns_fns.rcp.SENSOR_TARGET)
         ndns_fns.sendCMDtoSensor.request_version(ndns_fns.rcp,ndns_fns.cp,ndns_fns.sv)
+        ndns_mesh.MESH.loop_stop()
 
-        ##~~~~~~~~ Initialise GCP (Cloud) connection ~~~~~~~~##
-        T_jwt_refresh = datetime.datetime.now(tz=datetime.timezone.utc)
-        if ndns_fns.cp.ENABLE_GCP:
-            ndns_gcp.client_gcp = ndns_gcp.listen_for_messages(ndns_fns.cp , ndns_gcp.gateway_state, 2, cb=None)
         
         #LED_Indicator.update(LED_Indicator)
 
@@ -1474,7 +1327,7 @@ class NodeNsUpdateProcedure(Widget):
                 self.clock = []
         else:
             if self.clock == []:
-                self.clock = Clock.schedule_interval(self.update, 0.05)
+                self.clock = Clock.schedule_interval(self.update_mon_zone, 0.001)
         
 
     def alarm_sounds_switch_callback(self, switchObject, switchValue):
@@ -1714,7 +1567,7 @@ class NodeNsUpdateProcedure(Widget):
                 except:
                     pass
         if self.clock == []:
-            self.clock = Clock.schedule_interval(self.update, 0.05)
+            self.clock = Clock.schedule_interval(self.update, 0.01)
         
 
     def on_window_resize(self, window, width, height):
