@@ -606,8 +606,8 @@ class sensor_info:
         self.ew_period_sum_occ = []
         self.ew_period_max_occ = []
 
-    def check(self, mqttData):
-        addr = mqttData['addr']
+    def check(self, addr):
+        #addr = mqttData['addr']
         if isinstance(addr, list):
             addr = addr[0]
         if (addr not in self.connected_sensors):
